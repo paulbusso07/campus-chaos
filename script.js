@@ -58,6 +58,41 @@ const events = {
 };
 
 function choice(label, detail, effects, next, extras = {}) { return { label, detail, effects, next, extras }; }
+const scenarioBank = [];
+const scenarioPlaces = ['la cafétéria', 'le foyer', 'un amphi vide', 'le parking', 'la file du RU', 'le groupe WhatsApp', 'le local associatif', 'la laverie du campus', 'le couloir des salles de cours', 'la soirée de promo', 'le terrain de sport', 'le bureau de la scolarité'];
+const scenarioObjects = ['un gobelet beaucoup trop grand', 'un badge qui ne t’appartient pas', 'un PowerPoint nommé FINAL_v7', 'une enceinte sans chargeur', 'un panier de frites', 'un message vocal de 4 minutes', 'un formulaire administratif', 'un ballon qui rebondit mal', 'une photo compromettante', 'une liste BDE mystérieuse'];
+const scenarioVerbs = ['réparer', 'cacher', 'partager', 'expliquer', 'récupérer', 'dénoncer', 'improviser avec', 'négocier autour de', 'courir après', 'faire semblant de comprendre'];
+const scenarioTwists = ['avant le premier cours', 'pendant que tout le monde te regarde', 'avec une deadline dans 8 minutes', 'alors que tu n’as plus de batterie', 'devant une personne de 3A', 'après un vote très contestable', 'avec un public qui filme', 'juste avant le déjeuner'];
+const scenarioReactions = ['Tu prends une décision parfaitement raisonnable dans un contexte qui ne l’est pas.', 'Tu pensais vivre une journée normale. Le campus avait visiblement d’autres projets.', 'Personne ne sait comment tu en es arrivé là, mais tout le monde a une opinion.', 'Tu gagnes une anecdote et perds quelques minutes de ta vie que tu ne reverras jamais.', 'La situation était évitable. C’est précisément ce qui la rend intéressante.'];
+for (let index = 0; index < 240; index += 1) {
+  const place = scenarioPlaces[index % scenarioPlaces.length];
+  const object = scenarioObjects[(index * 3) % scenarioObjects.length];
+  const verb = scenarioVerbs[(index * 5) % scenarioVerbs.length];
+  const mood = index % 4 === 0 ? 'academic' : index % 3 === 0 ? 'chaos' : 'social';
+  const id = `random-${index + 1}`;
+  scenarioBank.push({ id, arc: 'IMPRÉVU · CAMPUS', icon: ['🎲', '🌀', '📣', '🧃'][index % 4], mood, title: `Quelqu’un te demande de ${verb} ${object} ${scenarioTwists[index % scenarioTwists.length]}.`, description: `La scène se déroule à ${place}. Tu avais prévu de faire autre chose, mais personne ne t’a demandé ton avis.`, choices: [
+    choice('J’aide, évidemment', 'Tu dis oui avant d’avoir compris la question.', { aura: 2 + index % 4, network: 1 + index % 5, energy: -(index % 4) }, null, { randomMoment: true }),
+    choice('Je transforme ça en opportunité', 'Une phrase très ambitieuse pour une situation très bancale.', { legend: 1 + index % 5, network: 2 + index % 4, alcoholism: index % 5 === 0 ? 2 : 0, energy: -(1 + index % 5) }, null, { randomMoment: true, tag: 'improviser' }),
+    choice('Je passe mon chemin', 'La sagesse est parfois une porte de sortie. Parfois seulement.', { aura: -(1 + index % 4), intelligence: index % 3 === 0 ? 2 : -1, energy: 3, network: -((index % 3) + 1) }, null, { randomMoment: true })
+  ], reaction: scenarioReactions[index % scenarioReactions.length] });
+}
+const scenarioById = Object.fromEntries(scenarioBank.map((scenario) => [scenario.id, scenario]));
+function randomScenarioId() {
+  const unused = scenarioBank.filter((scenario) => !state.usedScenarios.includes(scenario.id));
+  const pool = unused.length ? unused : scenarioBank;
+  return pool[Math.floor(Math.random() * pool.length)].id;
+}
+function randomizeEffects(effects) {
+  return Object.fromEntries(Object.entries(effects).map(([key, amount]) => {
+    if (!amount) return [key, amount];
+    const scale = 0.65 + Math.random() * 0.75;
+    const surprise = Math.random() < 0.16 ? -1 : 1;
+    const varied = Math.round(amount * scale * surprise);
+    return [key, varied === 0 ? (amount > 0 ? 1 : -1) : varied];
+  }));
+}
+function averageScore() { return Math.round(Object.keys(STAT_META).reduce((total, key) => total + state.stats[key], 0) / Object.keys(STAT_META).length); }
+function averageLabel(score) { return score >= 85 ? 'légende absolue' : score >= 70 ? 'profil très solide' : score >= 55 ? 'étudiant caméléon' : score >= 40 ? 'survivant crédible' : 'personnage secondaire attachant'; }
 function reactionFor(choiceData) {
   const reactions = {
     'Je connais déjà des gens': 'Tu arrives avec un carnet d’adresses déjà pré-rempli. Même le vigile connaît moins de monde que toi.',
@@ -75,24 +110,38 @@ function reactionFor(choiceData) {
     'Refuser avec dignité': 'Tu refuses avec dignité. Une 2A te respecte, deux autres pensent que tu es en échange universitaire.',
     'Aller en cours': 'Tu vas en cours pendant que les autres sauvent une présentation. Pour une fois, le syllabus ressemble à un choix raisonnable.',
   };
-  return reactions[choiceData.label] || 'Tu assumes ton choix avec une assurance remarquable, surtout maintenant que tout le monde l’a vu.';
+  return choiceData.reaction || reactions[choiceData.label] || 'Tu assumes ton choix avec une assurance remarquable, surtout maintenant que tout le monde l’a vu.';
 }
-function newGame(name, school) { return { name, school: school || 'École supérieure', stats: { aura: 40, network: 28, alcoholism: 12, legend: 7, intelligence: 55, energy: 76, money: 55 }, network: { promo: 20, upperYears: 8 }, flags: {}, tags: [], highlights: [], decisions: [], event: 'arrival-people' }; }
+function newGame(name, school) { return { name, school: school || 'École supérieure', stats: { aura: 40, network: 28, alcoholism: 12, legend: 7, intelligence: 55, energy: 76, money: 55 }, network: { promo: 20, upperYears: 8 }, flags: {}, tags: [], highlights: [], decisions: [], usedScenarios: [], randomNext: null, event: 'arrival-people' }; }
 function clamp(value) { return Math.max(0, Math.min(100, value)); }
 function save() { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
 function getAlcoholLabel(value) { return value <= 20 ? 'raisonnable' : value <= 40 ? 'bon vivant' : value <= 60 ? 'habitué' : value <= 80 ? 'gros fêtard' : 'légende des soirées'; }
 function getStatMeta(key) { return STAT_META[key] || ({ energy: ['Énergie', '⚡'], money: ['Budget', '💶'] }[key] || [key, '⚡']); }
 function apply(choiceData) {
   const before = { ...state.stats };
-  Object.entries(choiceData.effects).forEach(([key, amount]) => { if (key in state.stats) state.stats[key] = clamp(state.stats[key] + amount); });
+  const currentRandomId = state.event && state.event.startsWith('random-') ? state.event : null;
+  const variedEffects = randomizeEffects(choiceData.effects);
+  Object.entries(variedEffects).forEach(([key, amount]) => { if (key in state.stats) state.stats[key] = clamp(state.stats[key] + amount); });
   Object.entries(choiceData.extras).forEach(([key, value]) => { if (key === 'tag') state.tags.push(value); else if (key === 'highlight') state.highlights.push(value); else if (key === 'promo' || key === 'upperYears') state.network[key] = clamp(state.network[key] + value); else state.flags[key] = value; });
   state.decisions.push(choiceData.label); state.lastChanges = {};
   Object.keys(state.stats).forEach((key) => { if (state.stats[key] !== before[key]) state.lastChanges[key] = { before: before[key], after: state.stats[key], delta: state.stats[key] - before[key] }; });
-  state.recap = { choice: choiceData.label, reaction: reactionFor(choiceData), next: choiceData.next, changes: state.lastChanges };
+  const destination = choiceData.next || state.randomNext || null;
+  let nextEvent = destination;
+  if (currentRandomId) {
+    state.randomNext = null;
+  } else if (destination && Math.random() < 0.7) {
+    nextEvent = randomScenarioId();
+    state.randomNext = destination;
+    if (!state.usedScenarios.includes(nextEvent)) state.usedScenarios.push(nextEvent);
+  }
+  const randomReaction = currentRandomId ? scenarioById[currentRandomId].reaction : '';
+  state.recap = { choice: choiceData.label, reaction: randomReaction || reactionFor(choiceData), next: nextEvent, changes: state.lastChanges };
   state.event = null; save(); render();
 }
 
 let state = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+if (state && !Array.isArray(state.usedScenarios)) state.usedScenarios = [];
+if (state && state.randomNext === undefined) state.randomNext = null;
 if (state?.lastChanges) {
   Object.entries(state.lastChanges).forEach(([key, change]) => {
     if (typeof change === 'number') state.lastChanges[key] = { before: state.stats[key] - change, after: state.stats[key], delta: change };
@@ -101,8 +150,8 @@ if (state?.lastChanges) {
 function render() { document.getElementById('app').innerHTML = state ? (state.recap ? recapScreen() : gameScreen()) : startScreen(); bind(); }
 function startScreen() { return `<main class="start-screen"><div class="start-grid"><div class="start-copy"><div class="brand-lockup"><span class="brand-mark">CC</span><span>Campus Chaos</span></div><p class="eyebrow">SIMULATION SOCIALE · 1A</p><h1>Ta scolarité.<br><em>Ton chaos.</em></h1><p>Fais des choix discutables, rencontre les bonnes personnes et deviens la légende que personne n’avait demandée.</p><div class="start-stamps"><span>⚡ parties courtes</span><span>🤝 histoires uniques</span><span>📱 mobile friendly</span></div></div><form class="setup-card" id="start-form"><p class="eyebrow">NOUVELLE PARTIE</p><h2>Qui es-tu sur le campus ?</h2><label>Ton prénom<input name="name" autofocus placeholder="Paul, Clara, Sam..." required></label><label>Ton école <span>(optionnel)</span><input name="school" placeholder="École supérieure"></label><button class="primary-button">Entrer dans la légende →</button><small>La partie se sauvegarde automatiquement dans ce navigateur.</small></form></div></main>`; }
 function statRows() { return Object.entries(STAT_META).map(([key, meta]) => { const change = state.lastChanges?.[key]; return `<div class="stat-row"><div class="stat-main"><span class="stat-icon">${meta[1]}</span><span class="stat-label">${meta[0]}</span><strong>${state.stats[key]}<small>/100</small></strong>${change ? `<span class="delta ${change.delta > 0 ? 'positive' : 'negative'}">${change.delta > 0 ? '+' : ''}${change.delta}</span>` : ''}</div><div class="stat-track"><i style="width:${state.stats[key]}%"></i></div></div>`; }).join(''); }
-function gameScreen() { const event = events[state.event]; if (!event) return endScreen(); return `<main class="app-shell"><header class="topbar"><div class="brand-lockup"><span class="brand-mark">CC</span><span>Campus Chaos</span></div><div class="topbar-actions"><span class="save-status">▣ sauvegarde auto</span><button class="icon-button" id="reset">↻</button></div></header><div class="game-layout"><aside class="profile-panel"><div class="profile-heading"><div class="avatar">${state.name[0].toUpperCase()}</div><div><p class="eyebrow">ÉTUDIANT·E · 1A</p><h1>${state.name}</h1><p class="school-name">${state.school}</p></div></div><div class="month-row"><span>ANNÉE 1A</span><strong>SEPTEMBRE</strong></div><div class="stats-list">${statRows()}</div><div class="energy-strip"><span>⚡ énergie</span><strong>${state.stats.energy}</strong><div class="energy-bar"><i style="width:${state.stats.energy}%"></i></div></div><div class="profile-footnote">✦ <span>Alcoolisme : <strong>${getAlcoholLabel(state.stats.alcoholism)}</strong></span></div></aside><section class="play-area"><div class="progress-line"><span>1A · ${event.arc}</span><span>${state.decisions.length + 1} décisions</span></div><article class="event-card mood-${event.mood}"><div class="event-art"><span>${event.icon}</span><div class="art-noise"></div></div><div class="event-copy"><p class="eyebrow">${event.arc}</p><h2>${event.title}</h2><p class="event-description">${event.description}</p></div><div class="choices">${event.choices.map((item, index) => `<button class="choice-button" data-choice="${index}"><span class="choice-index">${String.fromCharCode(65 + index)}</span><span class="choice-content"><strong>${item.label}</strong>${item.detail ? `<small>${item.detail}</small>` : ''}</span><span>→</span></button>`).join('')}</div></article><div class="bottom-note">♧ <span>Chaque décision ouvre une version différente de ta vie sur le campus.</span></div></section></div></main>`; }
+function gameScreen() { const event = events[state.event] || scenarioById[state.event]; if (!event) return endScreen(); return `<main class="app-shell"><header class="topbar"><div class="brand-lockup"><span class="brand-mark">CC</span><span>Campus Chaos</span></div><div class="topbar-actions"><span class="save-status">▣ sauvegarde auto</span><button class="icon-button" id="reset">↻</button></div></header><div class="game-layout"><aside class="profile-panel"><div class="profile-heading"><div class="avatar">${state.name[0].toUpperCase()}</div><div><p class="eyebrow">ÉTUDIANT·E · 1A</p><h1>${state.name}</h1><p class="school-name">${state.school}</p></div></div><div class="month-row"><span>ANNÉE 1A</span><strong>SEPTEMBRE</strong></div><div class="stats-list">${statRows()}</div><div class="energy-strip"><span>⚡ énergie</span><strong>${state.stats.energy}</strong><div class="energy-bar"><i style="width:${state.stats.energy}%"></i></div></div><div class="profile-footnote">✦ <span>Alcoolisme : <strong>${getAlcoholLabel(state.stats.alcoholism)}</strong></span></div></aside><section class="play-area"><div class="progress-line"><span>1A · ${event.arc}</span><span>${state.decisions.length + 1} décisions</span></div><article class="event-card mood-${event.mood}"><div class="event-art"><span>${event.icon}</span><div class="art-noise"></div></div><div class="event-copy"><p class="eyebrow">${event.arc}</p><h2>${event.title}</h2><p class="event-description">${event.description}</p></div><div class="choices">${event.choices.map((item, index) => `<button class="choice-button" data-choice="${index}"><span class="choice-index">${String.fromCharCode(65 + index)}</span><span class="choice-content"><strong>${item.label}</strong>${item.detail ? `<small>${item.detail}</small>` : ''}</span><span>→</span></button>`).join('')}</div></article><div class="bottom-note">♧ <span>Chaque décision ouvre une version différente de ta vie sur le campus.</span></div></section></div></main>`; }
 function recapScreen() { return `<main class="recap-screen"><div class="recap-card"><p class="eyebrow">ÉTAPE INTERMÉDIAIRE · CONSÉQUENCES</p><div class="recap-icon">🧾</div><h1>Tu as choisi :<br><em>« ${state.recap.choice} »</em></h1><p class="recap-story">${state.recap.reaction}</p><div class="recap-deltas">${Object.entries(state.recap.changes).map(([key, change]) => { const meta = getStatMeta(key); return `<div class="recap-stat ${change.delta > 0 ? 'positive' : 'negative'}"><span>${meta[1]} <b>${meta[0]}</b></span><strong>${change.before} → ${change.after}</strong><small>(${change.delta > 0 ? '+' : ''}${change.delta})</small></div>`; }).join('')}</div><button class="primary-button" id="clear-recap">Continuer vers la prochaine étape →</button></div></main>`; }
-function endScreen() { const highlights = state.highlights.length ? state.highlights : ['Arrivée dans une nouvelle école', 'Premières décisions prises avec aplomb']; const challenges = ['challenge1', 'challenge2', 'challenge3'].filter((key) => state.flags[key] === true).length; return `<main class="end-screen"><div class="end-card"><p class="eyebrow">BILAN DE TON PROLOGUE</p><h1>${state.name} <span>· FIN DU DÉPART</span></h1><div class="end-grid"><div class="final-stats">${Object.entries(STAT_META).map(([key, meta]) => `<div><span>${meta[1]} ${meta[0]}</span><strong>${state.stats[key]}</strong></div>`).join('')}</div><div class="highlights"><p class="eyebrow">MOMENTS MARQUANTS</p>${highlights.map((item) => `<p>✦ ${item}</p>`).join('')}<p class="eyebrow challenge-label">DÉFIS RÉALISÉS</p><strong class="big-number">${challenges}/3</strong></div></div><div class="end-actions"><button class="primary-button" id="reset">Rejouer une autre vie ↻</button><span>🏆 La 2A arrive bientôt.</span></div></div></main>`; }
+function endScreen() { const highlights = state.highlights.length ? state.highlights : ['Arrivée dans une nouvelle école', 'Premières décisions prises avec aplomb']; const challenges = ['challenge1', 'challenge2', 'challenge3'].filter((key) => state.flags[key] === true).length; const score = averageScore(); return `<main class="end-screen"><div class="end-card"><p class="eyebrow">BILAN DE TON PROLOGUE</p><h1>${state.name} <span>· FIN DU DÉPART</span></h1><div class="average-score"><span>NOTE MOYENNE DU CAMPUS</span><strong>${score}<small>/100</small></strong><em>${averageLabel(score)}</em></div><div class="end-grid"><div class="final-stats">${Object.entries(STAT_META).map(([key, meta]) => `<div><span>${meta[1]} ${meta[0]}</span><strong>${state.stats[key]}/100</strong></div>`).join('')}</div><div class="highlights"><p class="eyebrow">MOMENTS MARQUANTS</p>${highlights.map((item) => `<p>✦ ${item}</p>`).join('')}<p class="eyebrow challenge-label">DÉFIS RÉALISÉS</p><strong class="big-number">${challenges}/3</strong><p class="random-count">${state.usedScenarios.length} imprévus rencontrés</p></div></div><div class="end-actions"><button class="primary-button" id="reset">Rejouer une autre vie ↻</button><span>🏆 La 2A arrive bientôt.</span></div></div></main>`; }
 function bind() { document.getElementById('start-form')?.addEventListener('submit', (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); state = newGame(data.get('name'), data.get('school')); save(); render(); }); document.querySelectorAll('[data-choice]').forEach((button) => button.addEventListener('click', () => apply(events[state.event].choices[button.dataset.choice]))); document.getElementById('clear-recap')?.addEventListener('click', () => { state.event = state.recap.next; state.recap = null; state.lastChanges = {}; save(); render(); }); document.querySelectorAll('#reset').forEach((button) => button.addEventListener('click', () => { localStorage.removeItem(SAVE_KEY); state = null; render(); })); }
 render();
